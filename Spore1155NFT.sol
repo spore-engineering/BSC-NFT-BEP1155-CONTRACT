@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.3;
 
 library EnumerableSet {
     struct Set {
@@ -305,6 +305,19 @@ interface IAccessControl {
     function renounceRole(bytes32 role, address account) external;
 }
 
+interface IERC20 {
+
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
 interface IERC165 {
     function supportsInterface(bytes4 interfaceId) external view returns (bool);
 }
@@ -349,6 +362,27 @@ interface IERC1155Receiver is IERC165 {
 
 interface IERC1155MetadataURI is IERC1155 {
     function uri(uint256 id) external view returns (string memory);
+}
+
+abstract contract ReentrancyGuard {
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    uint256 private _status;
+
+    constructor () {
+        _status = _NOT_ENTERED;
+    }
+
+    modifier nonReentrant() {
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+
+        _status = _ENTERED;
+
+        _;
+        
+        _status = _NOT_ENTERED;
+    }
 }
 
 abstract contract Context {
@@ -828,13 +862,33 @@ abstract contract AccessControlEnumerable is IAccessControlEnumerable, AccessCon
 
 contract Spore1155NFT is Context, AccessControlEnumerable, ERC1155Burnable, ERC1155Pausable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+    mapping (uint256 => bool) public nonTransferableTokens;
 
     constructor(string memory uri, string memory name_, string memory symbol_) ERC1155(uri, name_, symbol_) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
 
         _setupRole(MINTER_ROLE, _msgSender());
+        _setupRole(BURNER_ROLE, _msgSender());
         _setupRole(PAUSER_ROLE, _msgSender());
+    }
+    
+    function addNonTransferableTokens(uint256[] memory ids) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "needs to be admin");
+        
+        for (uint i = 0; i < ids.length; i++) {
+            nonTransferableTokens[ids[i]] = true;
+        }
+    }
+    
+    function removeNonTransferableTokens(uint256[] memory ids) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "needs to be admin");
+        
+        for (uint i = 0; i < ids.length; i++) {
+            nonTransferableTokens[ids[i]] = false;
+        }
     }
 
     function mint(address to, uint256 id, uint256 amount, bytes memory data) public virtual {
@@ -847,6 +901,18 @@ contract Spore1155NFT is Context, AccessControlEnumerable, ERC1155Burnable, ERC1
         require(hasRole(MINTER_ROLE, _msgSender()), "ERC1155PresetMinterPauser: must have minter role to mint");
 
         _mintBatch(to, ids, amounts, data);
+    }
+    
+    function burn(address account, uint256 id, uint256 amount) public override {
+        require(hasRole(BURNER_ROLE, _msgSender()), "ERC1155PresetMinterPauser: must have burner role to burn");
+
+        _burn(account, id, amount);
+    }
+
+    function burnBatch(address account, uint256[] memory ids, uint256[] memory amounts) public override {
+        require(hasRole(BURNER_ROLE, _msgSender()), "ERC1155PresetMinterPauser: must have minter role to mint");
+
+        _burnBatch(account, ids, amounts);
     }
 
     function pause() public virtual {
@@ -863,16 +929,14 @@ contract Spore1155NFT is Context, AccessControlEnumerable, ERC1155Burnable, ERC1
         return super.supportsInterface(interfaceId);
     }
 
-    function _beforeTokenTransfer(
-        address operator,
-        address from,
-        address to,
-        uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
-    )
-        internal virtual override(ERC1155, ERC1155Pausable)
-    {
+    function _beforeTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)  internal virtual override(ERC1155, ERC1155Pausable) {
+        
+        for (uint i = 0; i < ids.length; i++) {
+            if(!hasRole(MINTER_ROLE, _msgSender())) {
+                require(nonTransferableTokens[ids[i]] == false, "some of the tokens on your batch are restricted for transfer");
+            }
+        }
+        
         super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
     }
 }
