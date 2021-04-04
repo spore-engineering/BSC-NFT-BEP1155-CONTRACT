@@ -841,6 +841,12 @@ contract Spore1155NFT is Context, AccessControlEnumerable, ERC1155Burnable, ERC1
         _setupRole(PAUSER_ROLE, _msgSender());
     }
     
+    function setURI(string memory newuri) public {
+        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "needs to be admin");
+        
+        _setURI(newuri);
+    }
+    
     function addNonTransferableTokens(uint256[] memory ids) public {
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "needs to be admin");
         
