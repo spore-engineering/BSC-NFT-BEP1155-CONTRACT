@@ -832,8 +832,8 @@ contract Spore1155NFT is Context, AccessControlEnumerable, ERC1155Burnable, ERC1
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     mapping (uint256 => bool) public nonTransferableTokens;
-
-    constructor(string memory uri, string memory name_, string memory symbol_) ERC1155(uri, name_, symbol_) {
+    
+    constructor() ERC1155("https://nft.spore.engineering/erc1155_config_files/{id}.json", "Spore NFT Collectives", "nftSPORE") {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
 
         _setupRole(MINTER_ROLE, _msgSender());
